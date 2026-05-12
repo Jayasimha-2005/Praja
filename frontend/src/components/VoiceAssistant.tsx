@@ -31,6 +31,7 @@ export default function VoiceAssistant({ resetCounter = 0 }: VoiceAssistantProps
 
   const recognitionRef = useRef<any>(null);
   const speechTimeoutRef = useRef<number | null>(null);
+  const lastSentTranscriptRef = useRef<string | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAISpeakingRef = useRef(false);
   const conversationModeRef = useRef(false);
@@ -98,6 +99,11 @@ export default function VoiceAssistant({ resetCounter = 0 }: VoiceAssistantProps
       const finalText = transcript.trim();
       if (finalText.length < 3) return;
 
+      // Ignore if we've already queued or sent this exact transcript
+      if (lastSentTranscriptRef.current && lastSentTranscriptRef.current === finalText) {
+        return;
+      }
+
       if (isAISpeakingRef.current) {
         stopAISpeech();
       }
@@ -108,7 +114,9 @@ export default function VoiceAssistant({ resetCounter = 0 }: VoiceAssistantProps
 
       setPlaceholder(`Got: "${finalText}" - waiting 4s for more...`);
 
-      speechTimeoutRef.current = setTimeout(() => {
+      speechTimeoutRef.current = window.setTimeout(() => {
+        // mark as sent to prevent duplicates
+        lastSentTranscriptRef.current = finalText.trim();
         handleUserSpeech(finalText.trim());
         speechTimeoutRef.current = null;
       }, 4000);
@@ -123,7 +131,10 @@ export default function VoiceAssistant({ resetCounter = 0 }: VoiceAssistantProps
       if (!conversationModeRef.current) {
         setIsListening(false);
       } else {
-        try { recognition.start(); } catch (e) {}
+        // don't restart if we're waiting for processing
+        if (!isProcessing) {
+          try { recognition.start(); } catch (e) {}
+        }
       }
     };
 

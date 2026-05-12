@@ -23,6 +23,8 @@ class FIRService:
     def __init__(self):
         self.use_sarvam_chat = True
         self.use_sarvam_tts = True
+        self._sarvam_error_count = 0
+        self._sarvam_error_threshold = 3
         self.extractor = FIRDataExtractor()
         self.pdf_generator = FIRPDFGenerator()
         self.groq_enabled = os.getenv('GROQ_API_KEY') is not None
@@ -118,32 +120,47 @@ class FIRService:
 
     def _get_sarvam_response(self, user_message, language_name, language_code, history):
         """Get response from Sarvam AI"""
-
         system_prompt = create_fir_system_prompt(language_name)
 
-        # Build messages array
+        # Build messages array, but cap history to last N entries to avoid echoing
+        MAX_HISTORY = 8
         messages = [{'role': 'system', 'content': system_prompt}]
 
-        # Add conversation history with role mapping
-        for msg in history:
+        # Use only the last MAX_HISTORY messages
+        recent = history[-MAX_HISTORY:] if history else []
+        for msg in recent:
             role = msg.get('role', 'user')
             content = msg.get('parts', [{}])[0].get('text', '')
 
             if content:
-                # Map 'model' to 'assistant' for Sarvam AI
                 sarvam_role = 'assistant' if role == 'model' else role
                 messages.append({'role': sarvam_role, 'content': content})
 
         # Add current user message
         messages.append({'role': 'user', 'content': user_message})
 
-        # Get response from Sarvam AI
-        ai_response = chat_with_sarvam(messages, language_code)
+        # Call Sarvam with robust error handling; disable Sarvam after repeated auth failures
+        try:
+            ai_response = chat_with_sarvam(messages, language_code)
+            # reset error counter on success
+            self._sarvam_error_count = 0
 
-        if not ai_response:
-            ai_response = "I apologize, but I'm having trouble processing your request. Please try again."
+            if not ai_response:
+                return "I apologize, but I'm having trouble processing your request. Please try again."
 
-        return ai_response
+            return ai_response
+
+        except Exception as e:
+            # Log exception and increment error counter
+            print(f"Sarvam chat failed: {e}")
+            self._sarvam_error_count += 1
+
+            # If repeated authentication errors, disable Sarvam chat to avoid repeated 403s
+            if self._sarvam_error_count >= self._sarvam_error_threshold:
+                print("⚠️ Disabling Sarvam chat after repeated failures. Falling back to basic responses.")
+                self.use_sarvam_chat = False
+
+            return "I apologize, but I'm having trouble processing your request. Please try again."
 
     def _generate_audio(self, text, language_code):
         """Generate audio using Sarvam TTS or fallback to gTTS"""

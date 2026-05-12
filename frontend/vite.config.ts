@@ -9,12 +9,13 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to Flask backend
       '/api': {
-        target: 'https://localhost:5000',
+        // Backend runs without HTTPS in local dev by default
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false, // Allow self-signed certificates
       },
       '/health': {
-        target: 'https://localhost:5000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       }

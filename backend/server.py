@@ -45,9 +45,17 @@ if __name__ == '__main__':
     key_path = os.path.join(os.path.dirname(__file__), '../config/key.pem')
 
     # Start server
+    # Prefer HTTPS if certs are present, otherwise fall back to HTTP for local dev
+    ssl_context = None
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = (cert_path, key_path)
+        print(f"Using SSL certs: {cert_path}, {key_path}")
+    else:
+        print("⚠️ SSL certs not found; starting without HTTPS. To enable HTTPS place cert.pem and key.pem in config/ or set CERT_PATH/KEY_PATH in config/.env")
+
     app.run(
         debug=True,
         host='0.0.0.0',
         port=5000,
-        ssl_context=(cert_path, key_path)
+        ssl_context=ssl_context
     )
